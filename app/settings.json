@@ -1,0 +1,30 @@
+{
+  "snap_mode": "rare",
+  "free_only": true,
+  "effect_mode": "random_one",
+  "logo": {
+    "use": true,
+    "path": "C:/Users/user/Desktop/세상의 이유 로고.png",
+    "preset": "직접 지정",
+    "x": 0.854,
+    "y": 0.75,
+    "size": 17.0
+  },
+  "subtitle": {
+    "use": false,
+    "text_color": "#111111",
+    "use_background": true,
+    "background_color": "#ffffff",
+    "background_alpha": 80.0,
+    "border_color": "#000000",
+    "border_width": 0.0,
+    "bg_size": 0.0,
+    "pos_use": false,
+    "pos_x": 0.0,
+    "pos_y": -80.0,
+    "pos_preset": "원본 유지",
+    "font_size": 0.0,
+    "font_name": "",
+    "font_path": ""
+  }
+}

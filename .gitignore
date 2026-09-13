@@ -1,0 +1,24 @@
+# 비밀 파일 — 절대 공개 금지
+.env
+.env.*
+*.key
+*.pem
+credentials.json
+
+# Python 캐시
+__pycache__/
+*.py[cod]
+
+# 빌드 산출물
+build/
+dist/
+
+# 로그
+logs/
+*.log
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
+._*
