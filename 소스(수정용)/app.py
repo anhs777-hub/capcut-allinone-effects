@@ -3,6 +3,7 @@
 
 탭 구성: [기본] 파일/휙컷 빈도  [효과] 전환·필터·화면효과 선택(유료/무료)
         [로고] 이미지·위치·크기  [자막] 색상·배경·테두리
+        [챕터] 타임스탬프 목록대로 챕터 제목 표시
 설정은 settings.json, 효과 목록은 effects.json에 저장된다.
 """
 
@@ -38,6 +39,12 @@ LOGO_PRESETS = {
     "중앙 위": (0.0, 0.80),
     "왼쪽 위": (-0.80, 0.80),
 }
+# 챕터 제목 위치 (가로, 세로 · -100~100)
+CHAPTER_PRESETS = {
+    "왼쪽 위": (-72, 80),
+    "왼쪽 아래": (-72, -70),
+    "오른쪽 위": (10, 80),
+}
 
 DEFAULT_SETTINGS = {
     "snap_mode": "rare",
@@ -51,6 +58,12 @@ DEFAULT_SETTINGS = {
                  "bg_size": 0, "pos_use": False, "pos_x": 0, "pos_y": -80,
                  "pos_preset": "원본 유지", "font_size": 0,
                  "font_name": "", "font_path": ""},
+    "chapter": {"use": False, "txt": "", "preset": "왼쪽 위",
+                "x": -72, "y": 80, "align_left": True,
+                "hold": 5, "font_size": 7, "text_color": "#ffffff",
+                "use_background": True, "background_color": "#000000",
+                "background_alpha": 45, "border_color": "#000000",
+                "border_width": 0, "font_name": "", "font_path": ""},
 }
 
 
@@ -118,8 +131,8 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("캡컷자동올인원 - made by 바람님")
-        self.geometry("660x700")
-        self.minsize(600, 540)
+        self.geometry("680x768")
+        self.minsize(660, 600)
         self.configure(bg=BG)
         self.resizable(True, True)
 
@@ -174,7 +187,7 @@ class App(tk.Tk):
         head = ttk.Label(self, text="  캡컷자동올인원", font=("맑은 고딕", 15, "bold"),
                          style="Acc.TLabel")
         head.pack(anchor="w", padx=14, pady=(14, 2))
-        ttk.Label(self, text="  줌·전환·휙컷·로고·자막 스타일까지 한 번에 · made by 바람님",
+        ttk.Label(self, text="  줌·전환·휙컷·로고·자막·챕터 제목까지 한 번에 · made by 바람님",
                   style="Sub.TLabel").pack(anchor="w", padx=14)
 
         # 하단 고정 영역: 실행 버튼 / 진행바 / 상태줄
@@ -195,14 +208,17 @@ class App(tk.Tk):
         self.tab_fx = ttk.Frame(nb)
         self.tab_logo = ttk.Frame(nb)
         self.tab_sub = ttk.Frame(nb)
+        self.tab_ch = ttk.Frame(nb)
         nb.add(self.tab_basic, text=" 기본 ")
         nb.add(self.tab_fx, text=" 효과 ")
         nb.add(self.tab_logo, text=" 로고 ")
         nb.add(self.tab_sub, text=" 자막 ")
+        nb.add(self.tab_ch, text=" 챕터 ")
         self._build_basic()
         self._build_fx()
         self._build_logo()
         self._build_sub()
+        self._build_chapter()
 
     # ── [기본] 탭 ────────────────────────────────────────────────
 
@@ -232,7 +248,11 @@ class App(tk.Tk):
             self.zip_path = p
             self.file_lbl.config(text=p)
             self.run_btn.config(state="normal")
-            self.status.config(text="준비 완료. [효과]·[로고]·[자막] 탭을 확인한 뒤 실행하세요.")
+            self.status.config(
+                text="준비 완료. [효과]·[로고]·[자막]·[챕터] 탭을 확인한 뒤 실행하세요.")
+            twin = os.path.splitext(p)[0] + ".txt"
+            if os.path.exists(twin):
+                self.load_chapter_txt(twin, quiet=True)
 
     # ── [효과] 탭 ────────────────────────────────────────────────
 
@@ -407,13 +427,14 @@ class App(tk.Tk):
         ttk.Scale(row, from_=lo, to=hi, variable=var, length=length).pack(side="left")
         return var
 
-    def _draw_video_bg(self, c):
+    def _draw_video_bg(self, c, W=None, H=None):
         """미리보기 캔버스에 영상 느낌의 회색 그라데이션 배경을 깐다.
 
         어두운 색/밝은 색 자막·로고가 모두 잘 보이도록 중간 톤으로 채운다.
         """
         c.delete("all")
-        W, H = self.PV_W, self.PV_H
+        W = W or self.PV_W
+        H = H or self.PV_H
         top, bot = (150, 155, 163), (52, 56, 64)
         step = 4
         for i in range(0, H, step):
@@ -694,6 +715,235 @@ class App(tk.Tk):
             self.color_btns[key].config(text=hexv, bg=hexv)
             self._on_sub_touch()
 
+    # ── [챕터] 탭 ────────────────────────────────────────────────
+
+    CV_W, CV_H = 320, 180      # 챕터 미리보기 크기 (16:9)
+
+    def _build_chapter(self):
+        f = self.tab_ch
+        cs = self.settings["chapter"]
+        self.chapters = []
+
+        top = ttk.Frame(f)
+        top.pack(fill="x", padx=16, pady=(10, 2))
+        self.ch_use = tk.BooleanVar(value=cs.get("use", False))
+        ttk.Checkbutton(top, text="챕터 제목 넣기", variable=self.ch_use) \
+            .pack(side="left")
+        ttk.Button(top, text="📄 챕터 목록 txt 선택", command=self.select_chapter_txt) \
+            .pack(side="right")
+        self.ch_lbl = ttk.Label(f, text="선택된 목록 없음", style="Sub.TLabel")
+        self.ch_lbl.pack(anchor="w", padx=16)
+        ttk.Label(f, text="\"0:00 인트로\" 처럼 한 줄에 하나씩 · 유튜브 설명란 형식 그대로 OK",
+                  style="Sub.TLabel").pack(anchor="w", padx=16)
+        ttk.Label(f, text="zip 옆에 같은 이름의 txt 를 두면 자동으로 읽어옵니다.",
+                  style="Sub.TLabel").pack(anchor="w", padx=16)
+
+        body = ttk.Frame(f)
+        body.pack(fill="x", padx=16, pady=(6, 2))
+        self.cv = tk.Canvas(body, width=self.CV_W, height=self.CV_H,
+                            bg="#0d0e11", highlightthickness=1,
+                            highlightbackground="#3a3d46")
+        self.cv.pack(side="left")
+        tbox = ttk.Frame(body)
+        tbox.pack(side="left", fill="both", expand=True, padx=(10, 0))
+        ttk.Label(tbox, text="읽어온 챕터 (클릭 = 미리보기)",
+                  style="Sub.TLabel").pack(anchor="w")
+        self.ch_tree = ttk.Treeview(tbox, columns=("t", "name"),
+                                    show="headings", height=7,
+                                    selectmode="browse")
+        self.ch_tree.heading("t", text="시각")
+        self.ch_tree.heading("name", text="제목")
+        self.ch_tree.column("t", width=60, anchor="center")
+        self.ch_tree.column("name", width=170)
+        self.ch_tree.pack(fill="both", expand=True)
+        self.ch_tree.bind("<<TreeviewSelect>>",
+                          lambda e: self.redraw_ch_preview())
+        self.cv.bind("<Button-1>", self._on_ch_drag)
+        self.cv.bind("<B1-Motion>", self._on_ch_drag)
+
+        self.ch_x = tk.DoubleVar(value=cs.get("x", -72))
+        self.ch_y = tk.DoubleVar(value=cs.get("y", 80))
+        self.ch_align = tk.BooleanVar(value=cs.get("align_left", True))
+
+        row = ttk.Frame(f)
+        row.pack(fill="x", padx=16, pady=(4, 0))
+        ttk.Label(row, text="위치").pack(side="left")
+        self.ch_preset = ttk.Combobox(row, state="readonly", width=12,
+                                      values=list(CHAPTER_PRESETS) + ["직접 지정"])
+        self.ch_preset.set(cs.get("preset", "왼쪽 위"))
+        self.ch_preset.pack(side="left", padx=(6, 12))
+        self.ch_preset.bind("<<ComboboxSelected>>", self._on_ch_preset)
+        ttk.Checkbutton(row, text="제목 길이가 달라도 왼쪽 끝 맞추기",
+                        variable=self.ch_align,
+                        command=self.redraw_ch_preview).pack(side="left")
+
+        cols = ttk.Frame(f)
+        cols.pack(fill="x", padx=16, pady=(2, 0))
+        left = ttk.Frame(cols)
+        left.pack(side="left", anchor="n")
+        right = ttk.Frame(cols)
+        right.pack(side="left", anchor="n", padx=(20, 0))
+
+        self.ch_hold = self._slider_row(left, "표시 시간", 1, 15,
+                                        cs.get("hold", 5), length=165, padx=0, width=10)
+        self.ch_size = self._slider_row(left, "글자 크기", 3, 14,
+                                        cs.get("font_size", 7), length=170, padx=0,
+                                        width=9)
+        self.ch_bg_alpha = self._slider_row(right, "배경 진하기", 0, 100,
+                                            cs.get("background_alpha", 45),
+                                            length=165, padx=0, width=10)
+        self.ch_border = self._slider_row(right, "테두리 두께", 0, 20,
+                                          cs.get("border_width", 0),
+                                          length=165, padx=0, width=10)
+
+        crow = ttk.Frame(f)
+        crow.pack(fill="x", padx=16, pady=(4, 0))
+        self.ch_color_btns = {}
+        for key, label in (("text_color", "글자 색"), ("background_color", "배경 색"),
+                           ("border_color", "테두리 색")):
+            ttk.Label(crow, text=label).pack(side="left", padx=(0, 4))
+            btn = tk.Button(crow, text=cs.get(key, "#ffffff"), width=8, relief="flat",
+                            bg=cs.get(key, "#ffffff"),
+                            command=lambda k=key: self.pick_ch_color(k))
+            btn.pack(side="left", padx=(0, 10))
+            self.ch_color_btns[key] = btn
+        self.ch_bg_use = tk.BooleanVar(value=cs.get("use_background", True))
+        ttk.Checkbutton(crow, text="배경 상자", variable=self.ch_bg_use,
+                        command=self.redraw_ch_preview).pack(side="left")
+
+        frow = ttk.Frame(f)
+        frow.pack(fill="x", padx=16, pady=(4, 0))
+        ttk.Label(frow, text="폰트").pack(side="left", padx=(0, 6))
+        self.ch_font = ttk.Combobox(frow, state="readonly", width=24,
+                                    values=["기본 폰트"] + sorted(self.fonts))
+        self.ch_font.set(cs.get("font_name") if cs.get("font_name") in self.fonts
+                         else "기본 폰트")
+        self.ch_font.pack(side="left")
+        self.ch_font.bind("<<ComboboxSelected>>", lambda e: self.redraw_ch_preview())
+
+        for var in (self.ch_hold, self.ch_size, self.ch_bg_alpha, self.ch_border):
+            var.trace_add("write", lambda *_: self.redraw_ch_preview())
+
+        path = cs.get("txt", "")
+        if path and os.path.exists(path):
+            self.load_chapter_txt(path, quiet=True)
+        else:
+            self.redraw_ch_preview()
+
+    def select_chapter_txt(self):
+        p = filedialog.askopenfilename(
+            title="챕터 목록 txt 선택",
+            filetypes=[("텍스트 파일", "*.txt"), ("모든 파일", "*.*")])
+        if p:
+            self.load_chapter_txt(p)
+
+    def load_chapter_txt(self, path, quiet=False):
+        """챕터 txt 를 읽어 목록/미리보기를 갱신한다."""
+        try:
+            items = core.read_chapter_file(path)
+        except Exception as e:
+            if not quiet:
+                messagebox.showerror("오류", "챕터 목록을 읽지 못했어요.\n" + str(e))
+            return
+        if not items:
+            if not quiet:
+                messagebox.showwarning(
+                    "확인", "시각이 들어간 줄을 찾지 못했어요.\n"
+                            "\"0:00 인트로\" 처럼 시각 + 제목 형태로 적어 주세요.")
+            return
+        self.chapters = items
+        self.settings["chapter"]["txt"] = path
+        self.ch_lbl.config(text="📄 " + os.path.basename(path) +
+                                "   (챕터 " + str(len(items)) + "개)")
+        self.ch_tree.delete(*self.ch_tree.get_children())
+        for us, title in items:
+            s = us // core.US
+            self.ch_tree.insert("", "end", values=(
+                "%d:%02d:%02d" % (s // 3600, s % 3600 // 60, s % 60), title))
+        if not quiet:
+            self.ch_use.set(True)
+        self.redraw_ch_preview()
+
+    def _on_ch_preset(self, _=None):
+        name = self.ch_preset.get()
+        if name in CHAPTER_PRESETS:
+            x, y = CHAPTER_PRESETS[name]
+            self.ch_x.set(x)
+            self.ch_y.set(y)
+        self.redraw_ch_preview()
+
+    def _on_ch_drag(self, event):
+        W, H = self.CV_W, self.CV_H
+        x = (event.x - W / 2) / (W / 2) * 100
+        y = (H / 2 - event.y) / (H / 2) * 100
+        self.ch_x.set(round(max(-95, min(95, x)), 1))
+        self.ch_y.set(round(max(-95, min(95, y)), 1))
+        self.ch_preset.set("직접 지정")
+        self.ch_use.set(True)
+        self.redraw_ch_preview()
+
+    def pick_ch_color(self, key):
+        cur = self.settings["chapter"].get(key, "#ffffff")
+        _, hexv = colorchooser.askcolor(color=cur, title="색 선택")
+        if hexv:
+            self.settings["chapter"][key] = hexv
+            self.ch_color_btns[key].config(text=hexv, bg=hexv)
+            self.ch_use.set(True)
+            self.redraw_ch_preview()
+
+    def _ch_sample(self):
+        """미리보기에 쓸 제목 (목록에서 고른 것 → 첫 챕터 → 예시)."""
+        sel = self.ch_tree.selection() if hasattr(self, "ch_tree") else ()
+        if sel:
+            return self.ch_tree.item(sel[0], "values")[1]
+        if self.chapters:
+            return self.chapters[0][1]
+        return "여기에 챕터 제목"
+
+    def redraw_ch_preview(self, *_):
+        cv = self.cv
+        W, H = self.CV_W, self.CV_H
+        self._draw_video_bg(cv, W, H)
+        cs = self.settings["chapter"]
+        sample = self._ch_sample()
+        fam = self.ch_font.get() if hasattr(self, "ch_font") else "기본 폰트"
+        if not fam or fam == "기본 폰트":
+            fam = "맑은 고딕"
+        fs = self.ch_size.get()
+        pt = max(6, min(30, round(fs / 5.4 * 11)))
+        font = (fam, pt, "bold")
+
+        px = W / 2 + (self.ch_x.get() / 100.0) * W / 2
+        py = H / 2 - (self.ch_y.get() / 100.0) * H / 2
+        anchor = "w" if self.ch_align.get() else "center"
+        tmp = cv.create_text(px, py, text=sample, font=font, anchor=anchor)
+        x0, y0, x1, y1 = cv.bbox(tmp)
+        cv.delete(tmp)
+        if self.ch_bg_use.get():
+            a = self.ch_bg_alpha.get() / 100.0
+            fill = self._blend(cs.get("background_color", "#000000"), "#5a5e66", a)
+            pad = 7
+            cv.create_rectangle(x0 - pad, y0 - pad * 0.6, x1 + pad, y1 + pad * 0.6,
+                                fill=fill, outline="")
+        bw = self.ch_border.get()
+        if bw > 0:
+            off = max(1, round(bw / 20 * 3))
+            bc = cs.get("border_color", "#000000")
+            for dx, dy in ((-off, 0), (off, 0), (0, -off), (0, off),
+                           (-off, -off), (off, off), (-off, off), (off, -off)):
+                cv.create_text(px + dx, py + dy, text=sample, font=font,
+                               anchor=anchor, fill=bc)
+        cv.create_text(px, py, text=sample, font=font, anchor=anchor,
+                       fill=cs.get("text_color", "#ffffff"))
+
+        n = len(self.chapters)
+        info = ("챕터 " + str(n) + "개 · 시작할 때마다 "
+                + str(round(self.ch_hold.get(), 1)) + "초 표시"
+                if n else "챕터 목록 txt 를 선택해 주세요")
+        cv.create_rectangle(0, H - 18, W, H, fill="#1a1b20", outline="")
+        cv.create_text(6, H - 9, anchor="w", font=("맑은 고딕", 8, "bold"),
+                       fill="#8fd18f" if n else "#f0c05a", text=info)
+
     # ── 실행 ────────────────────────────────────────────────────
 
     def collect_opts(self):
@@ -717,6 +967,7 @@ class App(tk.Tk):
             "video_effects": pick("video_effects"),
             "logo": None,
             "subtitle": None,
+            "chapters": None,
         }
         lg = self.settings["logo"]
         if self.logo_use.get():
@@ -747,6 +998,28 @@ class App(tk.Tk):
             fs = self.sub_size.get()
             if fs >= 1:
                 opts["subtitle"]["font_size"] = round(fs, 1)
+        if self.ch_use.get():
+            if not self.chapters:
+                raise RuntimeError("챕터 목록 txt를 선택해 주세요. ([챕터] 탭)")
+            cs = self.settings["chapter"]
+            opts["chapters"] = {
+                "items": self.chapters,
+                "hold": round(self.ch_hold.get(), 1),
+                "x": round(self.ch_x.get() / 100.0, 3),
+                "y": round(self.ch_y.get() / 100.0, 3),
+                "align_left": self.ch_align.get(),
+                "font_size": round(self.ch_size.get(), 1),
+                "text_color": cs.get("text_color", "#ffffff"),
+                "use_background": self.ch_bg_use.get(),
+                "background_color": cs.get("background_color", "#000000"),
+                "background_alpha": round(self.ch_bg_alpha.get() / 100.0, 2),
+                "border_color": cs.get("border_color", "#000000"),
+                "border_width": round(self.ch_border.get() / 100.0, 3),
+            }
+            sel = self.ch_font.get()
+            if sel != "기본 폰트" and sel in self.fonts:
+                opts["chapters"]["font_name"] = sel
+                opts["chapters"]["font_path"] = self.fonts[sel]
         return opts
 
     def persist(self):
@@ -773,6 +1046,20 @@ class App(tk.Tk):
         sel = self.sub_font.get()
         st["font_name"] = sel if sel != "원본 유지" else ""
         st["font_path"] = self.fonts.get(sel, "") if sel != "원본 유지" else ""
+        cs = self.settings["chapter"]
+        cs["use"] = self.ch_use.get()
+        cs["preset"] = self.ch_preset.get()
+        cs["align_left"] = self.ch_align.get()
+        cs["x"] = round(self.ch_x.get(), 1)
+        cs["y"] = round(self.ch_y.get(), 1)
+        cs["hold"] = round(self.ch_hold.get(), 1)
+        cs["font_size"] = round(self.ch_size.get(), 1)
+        cs["use_background"] = self.ch_bg_use.get()
+        cs["background_alpha"] = round(self.ch_bg_alpha.get(), 0)
+        cs["border_width"] = round(self.ch_border.get(), 1)
+        csel = self.ch_font.get()
+        cs["font_name"] = csel if csel != "기본 폰트" else ""
+        cs["font_path"] = self.fonts.get(csel, "") if csel != "기본 폰트" else ""
         save_json(SETTINGS_FILE, self.settings)
         save_json(CATALOG_FILE, self.catalog)
 
@@ -818,6 +1105,8 @@ class App(tk.Tk):
             msg.append("자막 " + str(stats["subtitles"]) + "개 스타일 변경")
         else:
             msg.append("자막: 원본 그대로")
+        if stats.get("chapters"):
+            msg.append("챕터 제목 " + str(stats["chapters"]) + "개 표시")
         msg.append("\n새 파일: " + out)
         self.status.config(text=" · ".join(msg[:2]))
         messagebox.showinfo("완료!", "\n".join(msg))

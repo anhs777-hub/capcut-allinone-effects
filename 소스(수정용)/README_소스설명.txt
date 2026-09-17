@@ -16,9 +16,9 @@
 ------------------------------------------
 [1] 파일 구성
 ------------------------------------------
-  app.py            GUI (tkinter). 4개 탭 · 미리보기 · 설정 저장. 836줄.
+  app.py            GUI (tkinter). 5개 탭 · 미리보기 · 설정 저장.
   capcut_core.py    엔진. 캡컷 draft(zip)를 읽어 모션 키프레임/전환/
-                    필터/화면효과/로고/자막 스타일을 적용. 817줄.
+                    필터/화면효과/로고/자막 스타일/챕터 제목을 적용.
   effects.json      기본 효과 카탈로그 (배포 폴더 것의 사본).
                     실제로 쓰이는 파일은 배포 폴더의 app\effects.json 입니다.
   build.py          PyInstaller 빌드 스크립트.
@@ -61,6 +61,8 @@
   LOGO_PRESETS       [로고] 탭 위치 프리셋
   App._build_basic/_build_fx/_build_logo/_build_sub
                      각 탭 UI
+  App._build_chapter [챕터] 탭 UI (txt 읽기 · 미리보기 · 목록)
+  CHAPTER_PRESETS    챕터 제목 위치 프리셋
   App.collect_opts   GUI 값 → core.process 에 넘길 opts 만들기
   App.persist        settings.json / effects.json 저장
   App.done           완료 팝업 문구 (휙 컷 시각 표시)
@@ -77,6 +79,11 @@
   apply_global_effects  전체 구간 필터/화면효과 트랙 생성
   apply_logo         로고 오버레이 트랙 생성
   apply_subtitle_style  자막 색/배경/테두리/폰트/위치 일괄 변경
+  parse_chapters     "0:00 인트로" 같은 줄 → [(시작us, 제목)]
+  read_chapter_file  챕터 txt 읽기 (utf-8 / cp949)
+  text_material      텍스트 머티리얼 새로 만들기 (제목 한 줄)
+  text_width_norm    제목 폭 어림 (왼쪽 끝 맞추기 보정용)
+  apply_chapter_titles  챕터 시작마다 제목 세그먼트를 얹은 text 트랙 생성
   normalize_layers   트랙 레이어 순서 정리
                      (효과가 자막 아래로 가서 자막이 안 뿌예짐)
   process            전체 파이프라인 + "[완성] *.zip" 쓰기

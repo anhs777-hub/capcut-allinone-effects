@@ -8,11 +8,14 @@
   4) 전체 구간 필터/화면효과 (카탈로그에서 선택된 것만)
   5) (옵션) 채널 로고 오버레이 (위치/크기 지정)
   6) (옵션) 자막 스타일 일괄 변경 (글자색/배경색/테두리)
+  7) (옵션) 챕터 제목 오버레이 (타임스탬프 목록대로 좌측 상단에 표시)
 """
 
+import copy
 import json
 import os
 import random
+import re
 import struct
 import time
 import uuid
@@ -670,6 +673,241 @@ def apply_subtitle_style(draft, st):
     return n
 
 
+# ── 챕터 제목 ──────────────────────────────────────────────────
+
+CHAPTER_HOLD = 5.0      # 제목을 띄워두는 기본 시간(초)
+CHAPTER_SIZE = 7.0      # 기본 글자 크기 (자막 탭의 "글자 크기"와 같은 눈금)
+EM_PX = 10.2            # 글자 크기 1 당 대략 몇 px 인지 (폭 어림용)
+
+# "0:00 인트로" / "[00:01:35] 제목" / "1:35 - 제목" 같은 줄
+_TS_HEAD = re.compile(
+    r"^[\s\[\(\-*•]*(\d{1,3}):([0-5]?\d)(?::([0-5]?\d))?[\s\]\)]*"
+    r"[\-–—:.,|·~]*\s*(.+?)\s*$")
+# "인트로 0:00" 처럼 시각이 뒤에 오는 줄
+_TS_TAIL = re.compile(
+    r"^\s*(.+?)\s*[\[\(\-–—:.,|·~]*\s*"
+    r"(\d{1,3}):([0-5]?\d)(?::([0-5]?\d))?[\s\]\)]*$")
+
+
+def parse_chapters(text):
+    """유튜브 설명란 형식의 챕터 목록을 [(시작us, 제목), ...] 으로 바꾼다.
+
+    받아들이는 모양 (섞여 있어도 됨):
+        0:00 인트로
+        1:35 - 첫 번째 이야기
+        [0:12:05] 마무리
+        인트로 0:00
+    시각이 없는 줄은 건너뛴다. 시각 순으로 정렬하고, 같은 시각이 두 번
+    나오면 뒤에 온 것을 쓴다.
+    """
+    out = []
+    for raw in (text or "").replace("﻿", "").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        m = _TS_HEAD.match(line)
+        if m:
+            a, b, c, title = m.group(1), m.group(2), m.group(3), m.group(4)
+        else:
+            m = _TS_TAIL.match(line)
+            if not m:
+                continue
+            title, a, b, c = m.group(1), m.group(2), m.group(3), m.group(4)
+        if c is None:
+            h, mi, s = 0, int(a), int(b)
+        else:
+            h, mi, s = int(a), int(b), int(c)
+        title = title.strip(" \t-–—:.,|·")
+        if not title:
+            continue
+        out.append(((h * 3600 + mi * 60 + s) * US, title))
+
+    out.sort(key=lambda it: it[0])
+    merged = []
+    for t, title in out:
+        if merged and merged[-1][0] == t:
+            merged[-1] = (t, title)
+        else:
+            merged.append((t, title))
+    return merged
+
+
+def read_chapter_file(path):
+    """챕터 txt 를 읽어 파싱한다 (utf-8 / cp949 둘 다 시도)."""
+    for enc in ("utf-8-sig", "utf-8", "cp949"):
+        try:
+            with open(path, encoding=enc) as f:
+                return parse_chapters(f.read())
+        except UnicodeDecodeError:
+            continue
+    with open(path, encoding="utf-8", errors="replace") as f:
+        return parse_chapters(f.read())
+
+
+def text_width_norm(text, font_size, canvas_w=1920):
+    """글자 폭을 화면 가로 절반(=1.0) 단위로 어림잡는다.
+
+    정확한 값이 아니라 "왼쪽 맞춤" 보정용 근사다. 한글은 한 칸, 영문/숫자는
+    반 칸으로 세고, 줄이 여러 개면 가장 긴 줄을 쓴다.
+    """
+    widest = 0.0
+    for line in str(text).split("\n"):
+        units = sum(1.0 if ord(c) > 0x2E80 else 0.55 for c in line)
+        widest = max(widest, units)
+    return 2.0 * (widest * font_size * EM_PX) / max(canvas_w, 1)
+
+
+def _text_template(draft):
+    """프로젝트에 이미 있는 텍스트 머티리얼 (캡컷 버전별 필드를 맞추는 밑바탕)."""
+    for t in draft.get("materials", {}).get("texts", []):
+        if t.get("type") in ("text", "subtitle") and t.get("content"):
+            return t
+    return None
+
+
+def text_material(mat_id, text, st, template=None):
+    """제목 한 줄짜리 텍스트 머티리얼을 만든다."""
+    size = round(float(st.get("font_size") or CHAPTER_SIZE), 2)
+    color = st.get("text_color") or "#ffffff"
+    fp = (st.get("font_path") or "").replace(chr(92), "/")
+    bw = float(st.get("border_width", 0.0))
+    style = {
+        "fill": {"alpha": 1.0,
+                 "content": {"render_type": "solid",
+                             "solid": {"alpha": 1.0, "color": hex_to_rgb(color)}}},
+        "font": {"id": "", "path": fp},
+        "range": [0, len(text)],
+        "size": size,
+        "useLetterColor": True,
+        "strokes": ([{"content": {"render_type": "solid",
+                                  "solid": {"alpha": 1.0,
+                                            "color": hex_to_rgb(
+                                                st.get("border_color", "#000000"))}},
+                      "width": bw}] if bw > 0 else []),
+    }
+    content = json.dumps({"styles": [style], "text": text}, ensure_ascii=False)
+
+    mat = copy.deepcopy(template) if template else {}
+    mat.update({
+        "id": mat_id, "type": "text", "content": content,
+        "add_type": 0, "alignment": 0, "base_content": "", "bold_width": 0.0,
+        "border_alpha": 1.0,
+        "border_color": st.get("border_color", "#000000") if bw > 0 else "",
+        "border_width": bw,
+        "check_flag": 7, "combo_info": {"text_templates": []},
+        "fixed_height": -1.0, "fixed_width": -1.0,
+        "font_category_id": "", "font_category_name": "",
+        "font_id": "", "font_name": st.get("font_name", ""),
+        "font_path": fp, "font_resource_id": "", "font_size": size,
+        "font_source_platform": 0, "font_team_id": "",
+        "font_title": st.get("font_name", "") or "none", "font_url": "", "fonts": [],
+        "force_apply_line_max_width": False, "global_alpha": 1.0, "group_id": "",
+        "has_shadow": False, "initial_scale": 1.0, "inner_padding": -1.0,
+        "is_rich_text": False, "italic_degree": 0, "ktv_color": "", "language": "",
+        "layer_weight": 1, "letter_spacing": 0.0, "line_feed": 1,
+        "line_max_width": 0.82, "line_spacing": 0.02,
+        "multi_language_current": "none", "name": "",
+        "original_size": [], "preset_category": "", "preset_category_id": "",
+        "preset_has_set_alignment": False, "preset_id": "", "preset_index": 0,
+        "preset_name": "", "recognize_task_id": "", "recognize_type": 0,
+        "relevance_segment": [],
+        "shadow_alpha": 0.9, "shadow_angle": -45.0, "shadow_color": "",
+        "shadow_distance": 5.0,
+        "shadow_point": {"x": 0.6363961030678928, "y": -0.6363961030678928},
+        "shadow_smoothing": 1.0, "shape_clip_x": False, "shape_clip_y": False,
+        "style_name": "", "sub_type": 0, "subtitle_keywords": None,
+        "subtitle_template_original_fontsize": 0.0,
+        "text_alpha": 1.0, "text_color": color, "text_curve": None,
+        "text_preset_resource_id": "", "text_size": 30, "text_to_audio_ids": [],
+        "tts_auto_update": False, "typesetting": 0, "underline": False,
+        "underline_offset": 0.22, "underline_width": 0.05,
+        "use_effect_default_color": True,
+        "words": {"end_time": [], "start_time": [], "text": []},
+        "caption_template_info": {
+            "category_id": "", "category_name": "", "effect_id": "", "is_new": False,
+            "path": "", "request_id": "", "resource_id": "", "resource_name": "",
+            "source_platform": 0},
+    })
+    if st.get("use_background", True):
+        mat.update({
+            "background_style": 1,
+            "background_color": st.get("background_color", "#000000"),
+            "background_alpha": round(float(st.get("background_alpha", 0.45)), 3),
+            "background_width": 0.14, "background_height": 0.14,
+            "background_round_radius": float(st.get("background_round", 0.0)),
+            "background_horizontal_offset": 0.0, "background_vertical_offset": 0.0,
+        })
+    else:
+        mat.update({
+            "background_style": 0, "background_color": "", "background_alpha": 0.0,
+            "background_width": 0.14, "background_height": 0.14,
+            "background_round_radius": 0.0,
+            "background_horizontal_offset": 0.0, "background_vertical_offset": 0.0,
+        })
+    return mat
+
+
+def apply_chapter_titles(draft, chapters, st):
+    """챕터 시작 시각마다 제목을 띄우는 텍스트 트랙을 만든다.
+
+    chapters: [(시작us, 제목), ...]   st: 표시 시간/위치/글자 모양 설정
+    돌려주는 값: 실제로 넣은 제목 개수
+    """
+    if not chapters:
+        return 0
+    m = draft.setdefault("materials", {})
+    total = timeline_end(draft)
+    hold = max(0.5, float(st.get("hold", CHAPTER_HOLD))) * US
+    size = float(st.get("font_size") or CHAPTER_SIZE)
+    cw = draft.get("canvas_config", {}).get("width") or 1920
+    x = float(st.get("x", -0.72))
+    y = float(st.get("y", 0.80))
+    template = _text_template(draft)
+
+    # 본편 영상보다 위 레이어로
+    mx = 0
+    for t in draft.get("tracks", []):
+        if t.get("type") == "video":
+            for s in t.get("segments", []):
+                mx = max(mx, s.get("render_index", 0))
+
+    segs = []
+    for i, (start, title) in enumerate(chapters):
+        start = int(start)
+        if start >= total:
+            break
+        nxt = int(chapters[i + 1][0]) if i + 1 < len(chapters) else total
+        dur = min(hold, nxt - start, total - start)
+        if dur < 0.3 * US:
+            continue
+        mat = text_material(new_id(), title, st, template)
+        m.setdefault("texts", []).append(mat)
+        anim = {"id": new_id(), "type": "sticker_animation", "animations": [],
+                "multi_language_current": "none"}
+        m.setdefault("material_animations", []).append(anim)
+
+        cx = x
+        if st.get("align_left", True):
+            # transform 은 글자 상자의 "가운데"라서, 왼쪽 끝을 맞추려면
+            # 제목 길이의 절반만큼 오른쪽으로 밀어준다.
+            cx = x + text_width_norm(title, size, cw) / 2.0
+        seg = _base_segment(mat["id"], start, dur, mx + 1, 0)
+        seg["extra_material_refs"] = [anim["id"]]
+        seg["clip"] = {
+            "scale": {"x": 1.0, "y": 1.0},
+            "rotation": 0.0,
+            "transform": {"x": round(clamp(cx, -1.5, 1.5), 6), "y": round(y, 6)},
+            "flip": {"vertical": False, "horizontal": False},
+            "alpha": 1.0,
+        }
+        seg["uniform_scale"] = {"on": True, "value": 1.0}
+        segs.append(seg)
+
+    if segs:
+        draft["tracks"].append(make_track("text", segs))
+    return len(segs)
+
+
 # ── 효과 카탈로그 수집 / 출력 ──────────────────────────────────
 
 def scan_zip_for_effects(zip_path):
@@ -732,6 +970,8 @@ def process(zip_path, opts, progress=None):
       "logo": None | {"path", "x", "y", "size"},
       "subtitle": None | {"text_color", "use_background", "background_color",
                           "background_alpha", "border_color", "border_width"},
+      "chapters": None | {"items": [(시작us, 제목), ...], "hold": 초,
+                          "x", "y", "font_size", "text_color", ...},
       "seed": None | int,
     }
     """
@@ -756,6 +996,10 @@ def process(zip_path, opts, progress=None):
             draft, opts.get("filters") or [], effects_sel)
         if opts.get("subtitle"):
             stats["subtitles"] = apply_subtitle_style(draft, opts["subtitle"])
+        if opts.get("chapters"):
+            cs = opts["chapters"]
+            stats["chapters"] = apply_chapter_titles(
+                draft, cs.get("items") or [], cs)
 
         logo_bytes = None
         logo_arc = None
