@@ -732,16 +732,21 @@ def parse_chapters(text):
     return merged
 
 
-def read_chapter_file(path):
-    """챕터 txt 를 읽어 파싱한다 (utf-8 / cp949 둘 다 시도)."""
+def read_text_file(path):
+    """텍스트 파일을 통째로 읽는다 (utf-8 / cp949 둘 다 시도)."""
     for enc in ("utf-8-sig", "utf-8", "cp949"):
         try:
             with open(path, encoding=enc) as f:
-                return parse_chapters(f.read())
+                return f.read()
         except UnicodeDecodeError:
             continue
     with open(path, encoding="utf-8", errors="replace") as f:
-        return parse_chapters(f.read())
+        return f.read()
+
+
+def read_chapter_file(path):
+    """챕터 txt 를 읽어 파싱한다."""
+    return parse_chapters(read_text_file(path))
 
 
 def text_width_norm(text, font_size, canvas_w=1920):

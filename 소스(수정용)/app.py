@@ -58,7 +58,7 @@ DEFAULT_SETTINGS = {
                  "bg_size": 0, "pos_use": False, "pos_x": 0, "pos_y": -80,
                  "pos_preset": "원본 유지", "font_size": 0,
                  "font_name": "", "font_path": ""},
-    "chapter": {"use": False, "txt": "", "preset": "왼쪽 위",
+    "chapter": {"use": False, "txt": "", "text": "", "preset": "왼쪽 위",
                 "x": -72, "y": 80, "align_left": True,
                 "hold": 5, "font_size": 7, "text_color": "#ffffff",
                 "use_background": True, "background_color": "#000000",
@@ -131,7 +131,7 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("캡컷자동올인원 - made by 바람님")
-        self.geometry("680x768")
+        self.geometry("680x792")
         self.minsize(660, 600)
         self.configure(bg=BG)
         self.resizable(True, True)
@@ -735,7 +735,7 @@ class App(tk.Tk):
         self.ch_lbl.pack(anchor="w", padx=16)
         ttk.Label(f, text="\"0:00 인트로\" 처럼 한 줄에 하나씩 · 유튜브 설명란 형식 그대로 OK",
                   style="Sub.TLabel").pack(anchor="w", padx=16)
-        ttk.Label(f, text="zip 옆에 같은 이름의 txt 를 두면 자동으로 읽어옵니다.",
+        ttk.Label(f, text="txt 파일 없이 아래 칸에 바로 붙여넣어도 되고, zip 옆에 같은 이름의 txt 를 둬도 됩니다.",
                   style="Sub.TLabel").pack(anchor="w", padx=16)
 
         body = ttk.Frame(f)
@@ -746,16 +746,24 @@ class App(tk.Tk):
         self.cv.pack(side="left")
         tbox = ttk.Frame(body)
         tbox.pack(side="left", fill="both", expand=True, padx=(10, 0))
-        ttk.Label(tbox, text="읽어온 챕터 (클릭 = 미리보기)",
+        ttk.Label(tbox, text="여기에 붙여넣기 (또는 직접 입력)",
                   style="Sub.TLabel").pack(anchor="w")
+        self.ch_text = tk.Text(tbox, height=5, width=28, wrap="none",
+                               undo=True, bg=BG2, fg=FG, relief="flat",
+                               insertbackground=FG, padx=6, pady=4,
+                               font=("맑은 고딕", 9), highlightthickness=1,
+                               highlightbackground="#3a3d46")
+        self.ch_text.pack(fill="x")
+        self.ch_text.bind("<KeyRelease>", self._on_ch_text)
+        self.ch_text.bind("<<Paste>>", self._on_ch_text)
         self.ch_tree = ttk.Treeview(tbox, columns=("t", "name"),
-                                    show="headings", height=7,
+                                    show="headings", height=3,
                                     selectmode="browse")
         self.ch_tree.heading("t", text="시각")
         self.ch_tree.heading("name", text="제목")
         self.ch_tree.column("t", width=60, anchor="center")
         self.ch_tree.column("name", width=170)
-        self.ch_tree.pack(fill="both", expand=True)
+        self.ch_tree.pack(fill="both", expand=True, pady=(4, 0))
         self.ch_tree.bind("<<TreeviewSelect>>",
                           lambda e: self.redraw_ch_preview())
         self.cv.bind("<Button-1>", self._on_ch_drag)
@@ -824,8 +832,12 @@ class App(tk.Tk):
         for var in (self.ch_hold, self.ch_size, self.ch_bg_alpha, self.ch_border):
             var.trace_add("write", lambda *_: self.redraw_ch_preview())
 
+        saved = cs.get("text", "")
         path = cs.get("txt", "")
-        if path and os.path.exists(path):
+        if saved.strip():
+            self.ch_text.insert("1.0", saved)
+            self.reload_chapters(quiet=True)
+        elif path and os.path.exists(path):
             self.load_chapter_txt(path, quiet=True)
         else:
             self.redraw_ch_preview()
@@ -838,31 +850,55 @@ class App(tk.Tk):
             self.load_chapter_txt(p)
 
     def load_chapter_txt(self, path, quiet=False):
-        """챕터 txt 를 읽어 목록/미리보기를 갱신한다."""
+        """챕터 txt 를 읽어 붙여넣기 칸에 넣고 목록을 갱신한다."""
         try:
-            items = core.read_chapter_file(path)
+            raw = core.read_text_file(path)
         except Exception as e:
             if not quiet:
                 messagebox.showerror("오류", "챕터 목록을 읽지 못했어요.\n" + str(e))
             return
-        if not items:
+        if not core.parse_chapters(raw):
             if not quiet:
                 messagebox.showwarning(
                     "확인", "시각이 들어간 줄을 찾지 못했어요.\n"
                             "\"0:00 인트로\" 처럼 시각 + 제목 형태로 적어 주세요.")
             return
-        self.chapters = items
         self.settings["chapter"]["txt"] = path
+        self.ch_text.delete("1.0", "end")
+        self.ch_text.insert("1.0", raw.strip())
+        items = self.reload_chapters(quiet=quiet)
         self.ch_lbl.config(text="📄 " + os.path.basename(path) +
                                 "   (챕터 " + str(len(items)) + "개)")
+
+    def _on_ch_text(self, _=None):
+        """타이핑/붙여넣기 직후 잠깐 기다렸다가 다시 읽는다."""
+        if getattr(self, "_ch_job", None):
+            self.after_cancel(self._ch_job)
+        self._ch_job = self.after(300, self.reload_chapters)
+
+    def reload_chapters(self, quiet=False):
+        """붙여넣기 칸의 내용을 읽어 목록/미리보기를 갱신한다."""
+        self._ch_job = None
+        raw = self.ch_text.get("1.0", "end")
+        items = core.parse_chapters(raw)
+        self.chapters = items
         self.ch_tree.delete(*self.ch_tree.get_children())
         for us, title in items:
             s = us // core.US
             self.ch_tree.insert("", "end", values=(
                 "%d:%02d:%02d" % (s // 3600, s % 3600 // 60, s % 60), title))
-        if not quiet:
-            self.ch_use.set(True)
+        if items:
+            self.ch_lbl.config(text="챕터 " + str(len(items)) + "개 인식됨"
+                                    "   (시각 없는 줄은 무시합니다)")
+            if not quiet:
+                self.ch_use.set(True)
+        elif raw.strip():
+            self.ch_lbl.config(text="시각이 있는 줄이 없어요 — "
+                                    "\"0:00 제목\" 처럼 적어 주세요")
+        else:
+            self.ch_lbl.config(text="선택된 목록 없음")
         self.redraw_ch_preview()
+        return items
 
     def _on_ch_preset(self, _=None):
         name = self.ch_preset.get()
@@ -999,8 +1035,12 @@ class App(tk.Tk):
             if fs >= 1:
                 opts["subtitle"]["font_size"] = round(fs, 1)
         if self.ch_use.get():
+            if getattr(self, "_ch_job", None):
+                self.after_cancel(self._ch_job)
+                self.reload_chapters(quiet=True)
             if not self.chapters:
-                raise RuntimeError("챕터 목록 txt를 선택해 주세요. ([챕터] 탭)")
+                raise RuntimeError("챕터 목록을 붙여넣거나 txt를 선택해 주세요. "
+                                   "([챕터] 탭)")
             cs = self.settings["chapter"]
             opts["chapters"] = {
                 "items": self.chapters,
@@ -1048,6 +1088,7 @@ class App(tk.Tk):
         st["font_path"] = self.fonts.get(sel, "") if sel != "원본 유지" else ""
         cs = self.settings["chapter"]
         cs["use"] = self.ch_use.get()
+        cs["text"] = self.ch_text.get("1.0", "end").strip()
         cs["preset"] = self.ch_preset.get()
         cs["align_left"] = self.ch_align.get()
         cs["x"] = round(self.ch_x.get(), 1)
