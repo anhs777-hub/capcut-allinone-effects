@@ -4,11 +4,11 @@
   "effect_mode": "random_one",
   "logo": {
     "use": true,
-    "path": "C:/Users/Ryan An/Desktop/세상의 이유/Codex 이미지 2026년 9월 18일 오후 10_40_14-2.png",
+    "path": "C:/Users/user/Desktop/sesangui-iyu-assets/세상의 이유 로고.png",
     "preset": "직접 지정",
-    "x": 0.906,
-    "y": 0.843,
-    "size": 14.3
+    "x": 0.823,
+    "y": 0.685,
+    "size": 18.4
   },
   "subtitle": {
     "use": false,
@@ -30,13 +30,13 @@
   "chapter": {
     "use": true,
     "txt": "",
-    "text": "00:00 서랍 속 구두 상품권 한 장\n00:34 3강이 같이 쥐고 있던 종이\n02:43 둘은 왜 먼저 무너졌나\n04:42 금강도 3분의 1로 줄었습니다\n06:16 장부에서 나온 이상한 숫자 세 개\n10:08 본업의 두 배를 파는 회사\n12:20 버팀목이 흔들리기 시작한 날\n14:08 그래서 내 상품권은 지금 얼마인가\n15:58 종이의 값을 정하는 것",
+    "text": "00:00 쥐에게 선전포고한 도시\n00:28 뉴욕이 2년째 못 하고 있는 일\n05:21 미국은 왜 안 했을까\n09:07 1995년 1월 1일, 그날의 한국\n12:34 물러설 곳이 없었다\n19:23 그래서 여러분은",
     "preset": "직접 지정",
-    "x": -95.0,
-    "y": 88.9,
+    "x": -90.0,
+    "y": 74.4,
     "align_left": true,
-    "hold": 11.0,
-    "font_size": 4.8,
+    "hold": 15.0,
+    "font_size": 5.8,
     "text_color": "#ffffff",
     "use_background": true,
     "background_color": "#000000",

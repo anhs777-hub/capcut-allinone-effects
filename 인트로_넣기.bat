@@ -31,17 +31,18 @@ pause
 exit /b 1
 
 :FINDPY
+rem Actually run each candidate: "where python" also finds the Microsoft Store
+rem stub in WindowsApps, which only prints "Python was not found".
 set "PY="
-where py >nul 2>nul
+py --version >nul 2>nul
 if not errorlevel 1 set "PY=py"
-if not defined PY goto TRYPYTHON
-goto RUN
-
-:TRYPYTHON
-where python >nul 2>nul
+if defined PY goto RUN
+python --version >nul 2>nul
 if not errorlevel 1 set "PY=python"
-if not defined PY goto NOPY
-goto RUN
+if defined PY goto RUN
+for /d %%D in ("%LOCALAPPDATA%\Programs\Python\Python3*") do if exist "%%~D\python.exe" set "PY="%%~D\python.exe""
+if defined PY goto RUN
+goto NOPY
 
 :NOPY
 echo.
