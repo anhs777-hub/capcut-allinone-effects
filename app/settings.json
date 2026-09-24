@@ -4,11 +4,11 @@
   "effect_mode": "random_one",
   "logo": {
     "use": true,
-    "path": "C:/Users/user/Desktop/sesangui-iyu-assets/세상의 이유 로고.png",
+    "path": "C:/Users/user/Desktop/sesangui-iyu-assets/Codex 이미지 2026년 9월 18일 오후 10_40_14-2.png",
     "preset": "직접 지정",
-    "x": 0.823,
-    "y": 0.685,
-    "size": 18.4
+    "x": 0.891,
+    "y": 0.806,
+    "size": 13.5
   },
   "subtitle": {
     "use": false,
@@ -32,8 +32,8 @@
     "txt": "",
     "text": "00:00 쥐에게 선전포고한 도시\n00:28 뉴욕이 2년째 못 하고 있는 일\n05:21 미국은 왜 안 했을까\n09:07 1995년 1월 1일, 그날의 한국\n12:34 물러설 곳이 없었다\n19:23 그래서 여러분은",
     "preset": "직접 지정",
-    "x": -90.0,
-    "y": 74.4,
+    "x": -95.0,
+    "y": 87.8,
     "align_left": true,
     "hold": 15.0,
     "font_size": 5.8,
