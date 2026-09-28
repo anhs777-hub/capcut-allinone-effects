@@ -356,7 +356,7 @@ def extend_over(pj, seg, gap, mat_index):
     return True
 
 
-def shift_and_split(pj, at_us, gap, keep_logo, keep_bgm):
+def shift_and_split(pj, at_us, gap, keep_logo, keep_bgm, chapter_track=None):
     """at_us 이후를 gap 만큼 밀고, 걸친 세그먼트는 앞뒤로 가른다."""
     main = pj.main_track()
     mat_index = pj.material_index()
@@ -375,6 +375,15 @@ def shift_and_split(pj, at_us, gap, keep_logo, keep_bgm):
                 out.append(seg)
             elif st + du <= at_us:
                 out.append(seg)
+            elif track is chapter_track:
+                # 챕터 제목은 가르지 않는다 (인트로 앞에 잠깐 떴다가 뒤에 또 뜨는 것 방지).
+                # 앞에서 절반 이상 보였으면 거기서 끝내고, 아니면 통째로 인트로 뒤로.
+                if at_us - st >= du / 2:
+                    tr["duration"] = at_us - st
+                else:
+                    tr["start"] = at_us + gap
+                report["shift"] += 1
+                out.append(seg)
             else:                                    # 인트로 지점에 걸친 세그먼트
                 if keep:
                     ok = extend_over(pj, seg, gap, mat_index)
@@ -389,7 +398,52 @@ def shift_and_split(pj, at_us, gap, keep_logo, keep_bgm):
                     out.extend([front, back])
         track["segments"] = sorted(out, key=lambda s: int(
             (s.get("target_timerange") or {}).get("start", 0)))
+        if track is chapter_track:                   # 뒤로 옮긴 제목이 다음 제목과 겹치지 않게
+            segs = track["segments"]
+            for cur, nxt in zip(segs, segs[1:]):
+                ct, nt = cur["target_timerange"], nxt["target_timerange"]
+                ct["duration"] = min(int(ct["duration"]), int(nt["start"]) - int(ct["start"]))
     return report, main
+
+
+# ── 챕터 타임스탬프 ────────────────────────────────────────────
+
+def find_chapter_track(pj):
+    """① 프로그램이 넣은 챕터 제목 트랙. 자막(수백 개)보다 훨씬 짧은 text 트랙."""
+    cands = [t for t in pj.draft.get("tracks", [])
+             if t.get("type") == "text" and 0 < len(t.get("segments") or []) <= 40]
+    return min(cands, key=lambda t: len(t["segments"])) if cands else None
+
+
+def chapter_titles(pj, track):
+    """[(시작us, 제목), ...]"""
+    idx = pj.material_index()
+    out = []
+    for s in track["segments"]:
+        mat = (idx.get(s.get("material_id")) or (None, {}))[1]
+        text = mat.get("content", "")
+        try:
+            text = json.loads(text).get("text", text)
+        except (ValueError, AttributeError):
+            pass
+        out.append((int(s["target_timerange"]["start"]), str(text).strip()))
+    return sorted(out)
+
+
+def yt_time(us):
+    """유튜브 설명란 형식: 2:43 / 1:02:03"""
+    s = int(us // US)
+    h, rem = divmod(s, 3600)
+    m, s = divmod(rem, 60)
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
+
+
+def shifted_chapters(chapters, at_us, gap):
+    """인트로가 들어간 뒤의 챕터 시각. 인트로 지점부터 뒤는 인트로 길이만큼 밀린다."""
+    out = [(t + gap if t >= at_us else t, title) for t, title in chapters]
+    if out:
+        out[0] = (0, out[0][1])      # 유튜브 챕터는 0:00 으로 시작해야 인식된다
+    return out
 
 
 # ── 메인 ───────────────────────────────────────────────────────
@@ -521,8 +575,11 @@ def main():
                   f"(--exact 빼고 --at {fmt_time(near)} 또는 씬 번호로).")
 
     # 밀기 + 가르기
+    ch_track = find_chapter_track(pj)
+    chapters = chapter_titles(pj, ch_track) if ch_track else []
     rep, main = shift_and_split(pj, at_us, dur,
-                                keep_logo=a.logo_on_intro, keep_bgm=(a.bgm == "keep"))
+                                keep_logo=a.logo_on_intro, keep_bgm=(a.bgm == "keep"),
+                                chapter_track=ch_track)
 
     # 인트로 넣기
     arc_dir = pj.root + "Resources/"
@@ -554,6 +611,17 @@ def main():
     pj.save(out, add_files={arc_dir + arc_name: blob})
     print(f"\n[완료] {os.path.basename(out)}")
     print(f"       {out}")
+
+    if chapters:
+        lines = [f"{yt_time(t)} {title}" for t, title in shifted_chapters(chapters, at_us, dur)]
+        txt = os.path.splitext(out)[0] + "_챕터.txt"
+        with open(txt, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+        print(f"\n  [챕터] 인트로가 {dur / US:.2f}초 들어가서, 인트로 뒤 챕터는 그만큼 밀렸습니다.")
+        print("         유튜브 설명란에는 원래 목록 말고 아래 목록을 붙여넣으세요.\n")
+        for ln in lines:
+            print("           " + ln)
+        print(f"\n         저장: {os.path.basename(txt)}")
 
     good = verify_output(out, arc_dir + arc_name, mat["id"],
                          hashlib.md5(blob).hexdigest())
