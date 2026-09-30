@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['app.py'],
+    ['C:/Users/user/Desktop/capcut-allinone-effects/소스(수정용)/app.py'],
     pathex=[],
     binaries=[],
     datas=[],

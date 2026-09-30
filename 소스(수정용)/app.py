@@ -45,6 +45,11 @@ CHAPTER_PRESETS = {
     "왼쪽 아래": (-72, -70),
     "오른쪽 위": (10, 80),
 }
+# 고정 문구 위치 (왼쪽 끝 기준 · -100~100)
+NOTICE_PRESETS = {
+    "왼쪽 위": (-95, 90),
+    "왼쪽 아래": (-95, -90),
+}
 
 DEFAULT_SETTINGS = {
     "snap_mode": "rare",
@@ -58,6 +63,9 @@ DEFAULT_SETTINGS = {
                  "bg_size": 0, "pos_use": False, "pos_x": 0, "pos_y": -80,
                  "pos_preset": "원본 유지", "font_size": 0,
                  "font_name": "", "font_path": ""},
+    "notice": {"use": False, "text": core.NOTICE_TEXT, "preset": "왼쪽 위",
+               "x": -95, "y": 90, "font_size": 4.0, "opacity": 50,
+               "text_color": "#ffffff", "font_name": "", "font_path": ""},
     "chapter": {"use": False, "txt": "", "text": "", "preset": "왼쪽 위",
                 "x": -72, "y": 80, "align_left": True,
                 "hold": 5, "font_size": 7, "text_color": "#ffffff",
@@ -187,7 +195,7 @@ class App(tk.Tk):
         head = ttk.Label(self, text="  캡컷자동올인원", font=("맑은 고딕", 15, "bold"),
                          style="Acc.TLabel")
         head.pack(anchor="w", padx=14, pady=(14, 2))
-        ttk.Label(self, text="  줌·전환·휙컷·로고·자막·챕터 제목까지 한 번에 · made by 바람님",
+        ttk.Label(self, text="  줌·전환·휙컷·로고·자막·챕터 제목·고정 문구까지 한 번에 · made by 바람님",
                   style="Sub.TLabel").pack(anchor="w", padx=14)
 
         # 하단 고정 영역: 실행 버튼 / 진행바 / 상태줄
@@ -209,16 +217,19 @@ class App(tk.Tk):
         self.tab_logo = ttk.Frame(nb)
         self.tab_sub = ttk.Frame(nb)
         self.tab_ch = ttk.Frame(nb)
+        self.tab_nt = ttk.Frame(nb)
         nb.add(self.tab_basic, text=" 기본 ")
         nb.add(self.tab_fx, text=" 효과 ")
         nb.add(self.tab_logo, text=" 로고 ")
         nb.add(self.tab_sub, text=" 자막 ")
         nb.add(self.tab_ch, text=" 챕터 ")
+        nb.add(self.tab_nt, text=" 문구 ")
         self._build_basic()
         self._build_fx()
         self._build_logo()
         self._build_sub()
         self._build_chapter()
+        self._build_notice()
 
     # ── [기본] 탭 ────────────────────────────────────────────────
 
@@ -249,7 +260,7 @@ class App(tk.Tk):
             self.file_lbl.config(text=p)
             self.run_btn.config(state="normal")
             self.status.config(
-                text="준비 완료. [효과]·[로고]·[자막]·[챕터] 탭을 확인한 뒤 실행하세요.")
+                text="준비 완료. [효과]·[로고]·[자막]·[챕터]·[문구] 탭을 확인한 뒤 실행하세요.")
             twin = os.path.splitext(p)[0] + ".txt"
             if os.path.exists(twin):
                 self.load_chapter_txt(twin, quiet=True)
@@ -980,6 +991,125 @@ class App(tk.Tk):
         cv.create_text(6, H - 9, anchor="w", font=("맑은 고딕", 8, "bold"),
                        fill="#8fd18f" if n else "#f0c05a", text=info)
 
+    # ── [문구] 탭 ────────────────────────────────────────────────
+
+    def _build_notice(self):
+        f = self.tab_nt
+        ns = self.settings["notice"]
+
+        self.nt_use = tk.BooleanVar(value=ns.get("use", False))
+        ttk.Checkbutton(f, text="고정 문구 넣기 (영상 처음부터 끝까지)",
+                        variable=self.nt_use,
+                        command=self.redraw_nt_preview).pack(anchor="w", padx=16, pady=(12, 2))
+        ttk.Label(f, text="AI 제작 안내 같은 문구를 화면 한쪽에 작고 연하게 깔아 둡니다. "
+                          "인트로 구간에는 나오지 않습니다.",
+                  style="Sub.TLabel").pack(anchor="w", padx=16)
+
+        ttk.Label(f, text="문구").pack(anchor="w", padx=16, pady=(10, 2))
+        self.nt_text = tk.StringVar(value=ns.get("text") or core.NOTICE_TEXT)
+        tk.Entry(f, textvariable=self.nt_text, bg=BG2, fg=FG, relief="flat",
+                 insertbackground=FG, font=("맑은 고딕", 10), highlightthickness=1,
+                 highlightbackground="#3a3d46").pack(fill="x", padx=16, ipady=4)
+
+        body = ttk.Frame(f)
+        body.pack(fill="x", padx=16, pady=(10, 2))
+        self.nt_cv = tk.Canvas(body, width=self.CV_W, height=self.CV_H,
+                               bg="#0d0e11", highlightthickness=1,
+                               highlightbackground="#3a3d46")
+        self.nt_cv.pack(side="left")
+        self.nt_cv.bind("<Button-1>", self._on_nt_drag)
+        self.nt_cv.bind("<B1-Motion>", self._on_nt_drag)
+        side = ttk.Frame(body)
+        side.pack(side="left", fill="both", expand=True, padx=(12, 0))
+        ttk.Label(side, text="미리보기를 끌어서 위치 조정\n(문구의 왼쪽 끝 기준)",
+                  style="Sub.TLabel").pack(anchor="w")
+        prow = ttk.Frame(side)
+        prow.pack(anchor="w", pady=(8, 0))
+        ttk.Label(prow, text="위치").pack(side="left")
+        self.nt_preset = ttk.Combobox(prow, state="readonly", width=10,
+                                      values=list(NOTICE_PRESETS) + ["직접 지정"])
+        self.nt_preset.set(ns.get("preset", "왼쪽 위"))
+        self.nt_preset.pack(side="left", padx=(6, 0))
+        self.nt_preset.bind("<<ComboboxSelected>>", self._on_nt_preset)
+        crow = ttk.Frame(side)
+        crow.pack(anchor="w", pady=(8, 0))
+        ttk.Label(crow, text="글자 색").pack(side="left", padx=(0, 6))
+        self.nt_color_btn = tk.Button(crow, text=ns.get("text_color", "#ffffff"),
+                                      width=8, relief="flat",
+                                      bg=ns.get("text_color", "#ffffff"),
+                                      command=self.pick_nt_color)
+        self.nt_color_btn.pack(side="left")
+
+        self.nt_x = tk.DoubleVar(value=ns.get("x", -95))
+        self.nt_y = tk.DoubleVar(value=ns.get("y", 90))
+        self.nt_size = self._slider_row(f, "글자 크기", 2, 10, ns.get("font_size", 4.0),
+                                        length=260, width=10)
+        self.nt_opacity = self._slider_row(f, "진하기 (%)", 10, 100, ns.get("opacity", 50),
+                                           length=260, width=10)
+
+        frow = ttk.Frame(f)
+        frow.pack(fill="x", padx=16, pady=(4, 0))
+        ttk.Label(frow, text="폰트", width=10).pack(side="left")
+        self.nt_font = ttk.Combobox(frow, state="readonly", width=24,
+                                    values=["기본 폰트"] + sorted(self.fonts))
+        self.nt_font.set(ns.get("font_name") if ns.get("font_name") in self.fonts
+                         else "기본 폰트")
+        self.nt_font.pack(side="left")
+        self.nt_font.bind("<<ComboboxSelected>>", lambda e: self.redraw_nt_preview())
+
+        for var in (self.nt_text, self.nt_size, self.nt_opacity):
+            var.trace_add("write", lambda *_: self.redraw_nt_preview())
+        self.redraw_nt_preview()
+
+    def _on_nt_preset(self, _=None):
+        name = self.nt_preset.get()
+        if name in NOTICE_PRESETS:
+            x, y = NOTICE_PRESETS[name]
+            self.nt_x.set(x)
+            self.nt_y.set(y)
+        self.redraw_nt_preview()
+
+    def _on_nt_drag(self, event):
+        W, H = self.CV_W, self.CV_H
+        x = (event.x - W / 2) / (W / 2) * 100
+        y = (H / 2 - event.y) / (H / 2) * 100
+        self.nt_x.set(round(max(-98, min(95, x)), 1))
+        self.nt_y.set(round(max(-95, min(95, y)), 1))
+        self.nt_preset.set("직접 지정")
+        self.redraw_nt_preview()
+
+    def pick_nt_color(self):
+        cur = self.settings["notice"].get("text_color", "#ffffff")
+        _, hexv = colorchooser.askcolor(color=cur, title="색 선택")
+        if hexv:
+            self.settings["notice"]["text_color"] = hexv
+            self.nt_color_btn.config(text=hexv, bg=hexv)
+            self.redraw_nt_preview()
+
+    def redraw_nt_preview(self, *_):
+        cv = self.nt_cv
+        W, H = self.CV_W, self.CV_H
+        self._draw_video_bg(cv, W, H)
+        text = self.nt_text.get().strip() or "(문구 없음)"
+        fam = self.nt_font.get() if hasattr(self, "nt_font") else "기본 폰트"
+        if not fam or fam == "기본 폰트":
+            fam = "맑은 고딕"
+        pt = max(5, min(30, round(self.nt_size.get() / 5.4 * 11)))
+        px = W / 2 + (self.nt_x.get() / 100.0) * W / 2
+        py = H / 2 - (self.nt_y.get() / 100.0) * H / 2
+        a = self.nt_opacity.get() / 100.0
+        # 미리보기 배경의 그 높이 색과 섞어서 "연한" 느낌을 흉내 낸다
+        t = min(max(py / H, 0), 1)
+        bg = "#%02x%02x%02x" % tuple(round(p + (q - p) * t)
+                                     for p, q in zip((150, 155, 163), (52, 56, 64)))
+        fill = self._blend(self.settings["notice"].get("text_color", "#ffffff"), bg, a)
+        cv.create_text(px, py, text=text, font=(fam, pt), anchor="w", fill=fill)
+        on = self.nt_use.get()
+        cv.create_rectangle(0, H - 18, W, H, fill="#1a1b20", outline="")
+        cv.create_text(6, H - 9, anchor="w", font=("맑은 고딕", 8, "bold"),
+                       fill="#8fd18f" if on else "#f0c05a",
+                       text="영상 전체에 표시" if on else "꺼져 있음 — 위 체크를 켜세요")
+
     # ── 실행 ────────────────────────────────────────────────────
 
     def collect_opts(self):
@@ -1004,6 +1134,7 @@ class App(tk.Tk):
             "logo": None,
             "subtitle": None,
             "chapters": None,
+            "notice": None,
         }
         lg = self.settings["logo"]
         if self.logo_use.get():
@@ -1060,6 +1191,22 @@ class App(tk.Tk):
             if sel != "기본 폰트" and sel in self.fonts:
                 opts["chapters"]["font_name"] = sel
                 opts["chapters"]["font_path"] = self.fonts[sel]
+        if self.nt_use.get():
+            text = self.nt_text.get().strip()
+            if not text:
+                raise RuntimeError("고정 문구를 적어 주세요. ([문구] 탭)")
+            opts["notice"] = {
+                "text": text,
+                "x": round(self.nt_x.get() / 100.0, 3),
+                "y": round(self.nt_y.get() / 100.0, 3),
+                "font_size": round(self.nt_size.get(), 1),
+                "opacity": round(self.nt_opacity.get() / 100.0, 2),
+                "text_color": self.settings["notice"].get("text_color", "#ffffff"),
+            }
+            sel = self.nt_font.get()
+            if sel != "기본 폰트" and sel in self.fonts:
+                opts["notice"]["font_name"] = sel
+                opts["notice"]["font_path"] = self.fonts[sel]
         return opts
 
     def persist(self):
@@ -1101,6 +1248,17 @@ class App(tk.Tk):
         csel = self.ch_font.get()
         cs["font_name"] = csel if csel != "기본 폰트" else ""
         cs["font_path"] = self.fonts.get(csel, "") if csel != "기본 폰트" else ""
+        ns = self.settings["notice"]
+        ns["use"] = self.nt_use.get()
+        ns["text"] = self.nt_text.get().strip()
+        ns["preset"] = self.nt_preset.get()
+        ns["x"] = round(self.nt_x.get(), 1)
+        ns["y"] = round(self.nt_y.get(), 1)
+        ns["font_size"] = round(self.nt_size.get(), 1)
+        ns["opacity"] = round(self.nt_opacity.get(), 0)
+        nsel = self.nt_font.get()
+        ns["font_name"] = nsel if nsel != "기본 폰트" else ""
+        ns["font_path"] = self.fonts.get(nsel, "") if nsel != "기본 폰트" else ""
         save_json(SETTINGS_FILE, self.settings)
         save_json(CATALOG_FILE, self.catalog)
 
@@ -1148,6 +1306,8 @@ class App(tk.Tk):
             msg.append("자막: 원본 그대로")
         if stats.get("chapters"):
             msg.append("챕터 제목 " + str(stats["chapters"]) + "개 표시")
+        if stats.get("notice"):
+            msg.append("고정 문구 삽입 완료")
         msg.append("\n새 파일: " + out)
         self.status.config(text=" · ".join(msg[:2]))
         messagebox.showinfo("완료!", "\n".join(msg))

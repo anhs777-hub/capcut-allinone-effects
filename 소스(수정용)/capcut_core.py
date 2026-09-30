@@ -913,6 +913,62 @@ def apply_chapter_titles(draft, chapters, st):
     return len(segs)
 
 
+# ── 고정 문구 (영상 전체에 연하게 깔리는 안내 문구) ───────────────
+
+# 트랙 이름표. tools\add_intro.py / hold_last.py 가 이 이름으로 알아본다
+# (자막이나 챕터 제목으로 착각하지 않게).
+NOTICE_TRACK = "고정문구"
+NOTICE_TEXT = "AI 활용 제작 · 특정 국가·브랜드 비방 및 투자 권유 목적 없음"
+
+
+def apply_notice(draft, st):
+    """영상 처음부터 끝까지 고정 문구 한 줄을 띄운다. 넣었으면 True."""
+    text = (st.get("text") or "").strip()
+    total = timeline_end(draft)
+    if not text or total <= 0:
+        return False
+    m = draft.setdefault("materials", {})
+    size = float(st.get("font_size") or 4.0)
+    cw = draft.get("canvas_config", {}).get("width") or 1920
+    x = float(st.get("x", -0.95))
+    y = float(st.get("y", 0.90))
+    opacity = clamp(float(st.get("opacity", 0.5)), 0.05, 1.0)
+
+    mat = text_material(new_id(), text, dict(st, use_background=False),
+                        _text_template(draft))
+    # 연하게: 글자 자체의 불투명도 (캡컷 텍스트 > 스타일 > 불투명도)
+    mat["text_alpha"] = round(opacity, 3)
+    style = json.loads(mat["content"])
+    style["styles"][0]["fill"]["alpha"] = round(opacity, 3)
+    mat["content"] = json.dumps(style, ensure_ascii=False)
+    m.setdefault("texts", []).append(mat)
+    anim = {"id": new_id(), "type": "sticker_animation", "animations": [],
+            "multi_language_current": "none"}
+    m.setdefault("material_animations", []).append(anim)
+
+    mx = 0
+    for t in draft.get("tracks", []):
+        for s in t.get("segments", []):
+            mx = max(mx, s.get("render_index", 0))
+
+    cx = x + text_width_norm(text, size, cw) / 2.0      # 왼쪽 끝을 x 에 맞춤
+    seg = _base_segment(mat["id"], 0, total, mx + 1, 0)
+    seg["extra_material_refs"] = [anim["id"]]
+    seg["clip"] = {
+        "scale": {"x": 1.0, "y": 1.0},
+        "rotation": 0.0,
+        "transform": {"x": round(clamp(cx, -1.5, 1.5), 6), "y": round(y, 6)},
+        "flip": {"vertical": False, "horizontal": False},
+        "alpha": 1.0,
+    }
+    seg["uniform_scale"] = {"on": True, "value": 1.0}
+    track = make_track("text", [seg])
+    track["name"] = NOTICE_TRACK
+    track["is_default_name"] = False
+    draft["tracks"].append(track)
+    return True
+
+
 # ── 효과 카탈로그 수집 / 출력 ──────────────────────────────────
 
 def scan_zip_for_effects(zip_path):
@@ -1005,6 +1061,8 @@ def process(zip_path, opts, progress=None):
             cs = opts["chapters"]
             stats["chapters"] = apply_chapter_titles(
                 draft, cs.get("items") or [], cs)
+        if opts.get("notice"):
+            stats["notice"] = apply_notice(draft, opts["notice"])
 
         logo_bytes = None
         logo_arc = None

@@ -41,12 +41,17 @@ def last_segment(track):
     return max(segs, key=lambda s: int(s["target_timerange"]["start"]))
 
 
+def is_notice(track):
+    """① 의 [문구] 탭이 영상 끝까지 깔아 둔 고정 문구 (capcut_core.NOTICE_TRACK)."""
+    return track.get("type") == "text" and track.get("name") == "고정문구"
+
+
 def content_end(pj):
-    """음성·자막이 끝나는 시각 (둘 중 늦은 쪽)."""
+    """음성·자막이 끝나는 시각 (둘 중 늦은 쪽). 고정 문구는 자막이 아니라 뺀다."""
     ends = {}
     for t in pj.draft.get("tracks") or []:
         typ = t.get("type")
-        if typ in ("audio", "text") and t.get("segments"):
+        if typ in ("audio", "text") and t.get("segments") and not is_notice(t):
             ends[typ] = max(ends.get(typ, 0), track_end(t))
     return ends
 
@@ -138,7 +143,9 @@ def main():
         nm = {"video": "화면", "audio": "음성", "text": "자막",
               "effect": "화면효과", "filter": "필터", "sticker": "스티커"}
         typ = nm.get(t.get("type"), t.get("type"))
-        if t.get("type") == "video" and t is not main_tr:
+        if is_notice(t):
+            typ = "고정 문구"
+        elif t.get("type") == "video" and t is not main_tr:
             typ = "로고/워터마크"
         elif t.get("type") == "video":
             typ = "화면 (메인)"
@@ -211,6 +218,13 @@ def main():
         how2 = extend_segment(pj, s2, target - e, idx)
         print(f"\n  로고/워터마크도 {fmt_time(e)} → {fmt_time(target)} 로 늘림")
         print(f"    {how2}")
+
+    # 고정 문구도 끝까지
+    for t in pj.draft.get("tracks") or []:
+        if is_notice(t) and track_end(t) >= main_end - US:
+            e = track_end(t)
+            last_segment(t)["target_timerange"]["duration"] += target - e
+            print(f"\n  고정 문구도 {fmt_time(e)} → {fmt_time(target)} 로 늘림")
 
     pj.draft["duration"] = pj.timeline_end()
 

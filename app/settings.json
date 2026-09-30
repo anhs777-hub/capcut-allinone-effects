@@ -4,11 +4,11 @@
   "effect_mode": "random_one",
   "logo": {
     "use": true,
-    "path": "C:/Users/user/Desktop/sesangui-iyu-assets/Codex 이미지 2026년 9월 18일 오후 10_40_14-2.png",
+    "path": "C:/Users/user/Desktop/sesangui-iyu-assets/ChatGPT 이미지 2026년 9월 30일 오후 11_05_06(투명).png",
     "preset": "직접 지정",
-    "x": 0.891,
-    "y": 0.806,
-    "size": 13.5
+    "x": 0.849,
+    "y": 0.759,
+    "size": 24.3
   },
   "subtitle": {
     "use": false,
@@ -28,9 +28,9 @@
     "font_path": ""
   },
   "chapter": {
-    "use": true,
+    "use": false,
     "txt": "",
-    "text": "00:00 레일에 서명한 날\n01:21 법에 적은 2시간 40분\n04:22 레일 없는 고가교\n06:55 한국도 처음에는 비슷했다\n10:29 달리면서 고친 것들\n13:06 비행기가 물러난 길\n14:21 이제는 파는 나라\n16:00 다시, 프레즈노의 레일 한 토막",
+    "text": "00:00 폴란드 항구에 내린 전차\n00:44 100대 1의 독일행\n04:34 전차 20대짜리 보상안\n06:20 끊긴 건 독일군의 주문이었다\n07:57 계약 102일 만의 도착\n09:38 휴전선이 만든 주문\n11:02 전차 속 독일 부품\n13:52 공장 짓는 법까지\n16:42 다시, 1963년 김포공항",
     "preset": "직접 지정",
     "x": -95.0,
     "y": 87.8,
@@ -43,6 +43,18 @@
     "background_alpha": 100.0,
     "border_color": "#000000",
     "border_width": 4.4,
+    "font_name": "",
+    "font_path": ""
+  },
+  "notice": {
+    "use": true,
+    "text": "AI 활용 제작 · 특정 국가·브랜드 비방 및 투자 권유 목적 없음",
+    "preset": "왼쪽 위",
+    "x": -95.0,
+    "y": 90.0,
+    "font_size": 3.3,
+    "opacity": 50.0,
+    "text_color": "#ffffff",
     "font_name": "",
     "font_path": ""
   }

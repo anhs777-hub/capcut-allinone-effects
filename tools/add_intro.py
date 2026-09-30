@@ -35,6 +35,7 @@ from _capcut import (US, Project, fmt_time, fmt_dur, new_id, dup_material,   # n
                      setup_console, split_segment, die)
 
 VIDEO_EXT = (".mp4", ".mov", ".m4v", ".avi", ".mkv", ".webm")
+NOTICE_TRACK = "고정문구"      # ① 의 [문구] 탭이 넣는 트랙 이름 (capcut_core.NOTICE_TRACK)
 
 
 # ── 씬 목록 ────────────────────────────────────────────────────
@@ -411,7 +412,8 @@ def shift_and_split(pj, at_us, gap, keep_logo, keep_bgm, chapter_track=None):
 def find_chapter_track(pj):
     """① 프로그램이 넣은 챕터 제목 트랙. 자막(수백 개)보다 훨씬 짧은 text 트랙."""
     cands = [t for t in pj.draft.get("tracks", [])
-             if t.get("type") == "text" and 0 < len(t.get("segments") or []) <= 40]
+             if t.get("type") == "text" and 0 < len(t.get("segments") or []) <= 40
+             and t.get("name") != NOTICE_TRACK]
     return min(cands, key=lambda t: len(t["segments"])) if cands else None
 
 
