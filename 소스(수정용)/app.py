@@ -26,7 +26,26 @@ ACC = "#d8b25a"
 APP_DIR = os.path.dirname(os.path.abspath(
     sys.executable if getattr(sys, "frozen", False) else __file__))
 CATALOG_FILE = os.path.join(APP_DIR, "effects.json")
-SETTINGS_FILE = os.path.join(APP_DIR, "settings.json")
+
+# 채널별 설정: 시작하기_<채널>.bat 이 "--channel <id>" 로 실행하면
+# settings_<id>.json 을 따로 읽고 쓴다 (로고·문구·챕터가 채널마다 다르니까).
+# id 는 bat 안에 쓰므로 영문만 (cmd.exe 가 bat 속 한글을 깨뜨림).
+CHANNEL_NAMES = {"sesang": "세상의 이유", "jisik": "지식대학"}
+
+
+def _channel_arg():
+    args = sys.argv[1:]
+    if "--channel" in args:
+        i = args.index("--channel")
+        if i + 1 < len(args):
+            return args[i + 1].strip()
+    return ""
+
+
+CHANNEL = _channel_arg()
+CHANNEL_NAME = CHANNEL_NAMES.get(CHANNEL, CHANNEL)
+SETTINGS_FILE = os.path.join(
+    APP_DIR, "settings_" + CHANNEL + ".json" if CHANNEL else "settings.json")
 
 SNAP_MODES = [
     ("none", "없음 (드리프트만)"),
@@ -138,7 +157,8 @@ def save_json(path, data):
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("캡컷자동올인원 - made by 바람님")
+        self.title("캡컷자동올인원" + (" [" + CHANNEL_NAME + "]" if CHANNEL else "")
+                   + " - made by 바람님")
         self.geometry("680x792")
         self.minsize(660, 600)
         self.configure(bg=BG)
@@ -192,8 +212,8 @@ class App(tk.Tk):
         s.configure("Horizontal.TProgressbar", background=ACC, troughcolor=BG2)
 
     def _build(self):
-        head = ttk.Label(self, text="  캡컷자동올인원", font=("맑은 고딕", 15, "bold"),
-                         style="Acc.TLabel")
+        head = ttk.Label(self, text="  캡컷자동올인원" + ("  ·  " + CHANNEL_NAME if CHANNEL else ""),
+                         font=("맑은 고딕", 15, "bold"), style="Acc.TLabel")
         head.pack(anchor="w", padx=14, pady=(14, 2))
         ttk.Label(self, text="  줌·전환·휙컷·로고·자막·챕터 제목·고정 문구까지 한 번에 · made by 바람님",
                   style="Sub.TLabel").pack(anchor="w", padx=14)

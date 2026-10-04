@@ -1,0 +1,61 @@
+{
+  "snap_mode": "rare",
+  "free_only": true,
+  "effect_mode": "random_one",
+  "logo": {
+    "use": true,
+    "path": "C:/Users/user/Desktop/지식대학/지식대학 프로필 이미지.png",
+    "preset": "직접 지정",
+    "x": 0.901,
+    "y": 0.824,
+    "size": 16.2
+  },
+  "subtitle": {
+    "use": false,
+    "text_color": "#111111",
+    "use_background": true,
+    "background_color": "#ffffff",
+    "background_alpha": 80.0,
+    "border_color": "#000000",
+    "border_width": 0.0,
+    "bg_size": 0.0,
+    "pos_use": false,
+    "pos_x": 0.0,
+    "pos_y": -80.0,
+    "pos_preset": "원본 유지",
+    "font_size": 0.0,
+    "font_name": "",
+    "font_path": ""
+  },
+  "chapter": {
+    "use": true,
+    "txt": "",
+    "text": "",
+    "preset": "직접 지정",
+    "x": -95.0,
+    "y": 87.8,
+    "align_left": true,
+    "hold": 15.0,
+    "font_size": 5.8,
+    "text_color": "#ffffff",
+    "use_background": true,
+    "background_color": "#000000",
+    "background_alpha": 100.0,
+    "border_color": "#000000",
+    "border_width": 4.4,
+    "font_name": "",
+    "font_path": ""
+  },
+  "notice": {
+    "use": false,
+    "text": "AI 활용 제작 · 특정 국가·브랜드 비방 및 투자 권유 목적 없음",
+    "preset": "왼쪽 위",
+    "x": -95.0,
+    "y": 90.0,
+    "font_size": 3.3,
+    "opacity": 50.0,
+    "text_color": "#ffffff",
+    "font_name": "",
+    "font_path": ""
+  }
+}
