@@ -28,7 +28,7 @@
     "font_path": ""
   },
   "chapter": {
-    "use": true,
+    "use": false,
     "txt": "",
     "text": "",
     "preset": "직접 지정",
