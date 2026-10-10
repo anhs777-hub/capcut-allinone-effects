@@ -127,20 +127,32 @@ def cover_scale(w, h, cw, ch):
     return max(cw / dw, ch / dh)
 
 
+def resources_prefix(pj):
+    """다른 클립들이 쓰는 경로 형식 그대로의 ".../Resources/".
+
+    보통은 "##_draftpath_placeholder_...##/Resources/" 지만, 어떤 프로젝트는
+    "C:/Users/.../com.lveditor.draft/<프로젝트>/Resources/" 처럼 실제 경로로
+    들어 있다. 형식이 다르면 캡컷이 인트로만 "미디어 분실"로 띄우므로 다수를 따른다.
+    """
+    paths = [v.get("path", "") for v in (pj.draft.get("materials") or {}).get("videos", []) or []]
+    common = Counter(p.split("/Resources/")[0] for p in paths if "/Resources/" in p)
+    if common:
+        return common.most_common(1)[0][0] + "/Resources/"
+    return pj.placeholder_prefix() + "/Resources/"
+
+
 def build_intro_material(pj, arc_name, w, h, dur, has_audio):
     """기존 영상 머티리얼을 본떠서 인트로용 머티리얼을 만든다."""
     vids = (pj.draft.get("materials") or {}).get("videos") or []
-    base = None
-    for v in vids:
-        if v.get("type") == "video":
-            base = v
-            break
+    # 영상 클립이 있으면 그걸, 씬이 전부 사진인 프로젝트면 사진을 본떠서 영상으로 바꾼다
+    base = (next((v for v in vids if v.get("type") == "video"), None)
+            or next((v for v in vids if v.get("type") == "photo"), None))
     if base is None:
-        die("프로젝트에 영상 머티리얼이 없어 인트로를 만들 수 없습니다.")
+        die("프로젝트에 영상·사진 머티리얼이 없어 인트로를 만들 수 없습니다.")
     mat = copy.deepcopy(base)
     mat["id"] = new_id()
     mat["type"] = "video"
-    mat["path"] = pj.placeholder_prefix() + "/Resources/" + arc_name
+    mat["path"] = resources_prefix(pj) + arc_name
     mat["material_name"] = arc_name
     if "extra_info" in mat:            # 원본 클립에 없는 키는 새로 만들지 않는다
         mat["extra_info"] = arc_name

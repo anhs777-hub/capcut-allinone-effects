@@ -66,6 +66,53 @@ def fmt_dur(us):
 
 # ── zip 읽기/쓰기 ──────────────────────────────────────────────
 
+def fix_zip_name(name):
+    """깨진 한글 파일 이름을 되살린다.
+
+    zip 을 손으로 다시 압축하면 한글 이름이 "UTF-8 표시" 없이 들어가는 경우가
+    있다. 그러면 '누리호' 가 'δêäδª¼φÿ╕' 처럼 읽히고, 그대로 다시 쓰면
+    프로젝트 폴더 이름 자체가 깨져 캡컷에서 미디어를 못 찾는다.
+    """
+    try:
+        raw = name.encode("cp437")      # 깨진 이름은 cp437 로 되돌리면 원래 바이트
+    except UnicodeEncodeError:
+        return name                     # 한글이 제대로 들어 있는 정상 이름
+    if raw.isascii():
+        return name
+    for enc in ("utf-8", "cp949"):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            pass
+    return name
+
+
+def open_zip(path):
+    """읽기용 ZipFile. 깨진 한글 이름을 고쳐서 namelist()/read(이름)에 쓴다."""
+    z = zipfile.ZipFile(path)
+    changed = False
+    for info in z.infolist():
+        fixed = fix_zip_name(info.filename)
+        if fixed != info.filename:
+            info.filename = fixed       # 실제 읽기는 orig_filename 으로 확인하므로 안전
+            changed = True
+    if changed:
+        z.NameToInfo = {i.filename: i for i in z.infolist()}
+    return z
+
+
+def draft_twins(names, entry):
+    """entry 와 같은 폴더에 있는 다른 타임라인 파일들.
+
+    캡컷에서 한 번 열었다 저장한 프로젝트는 draft_info.json 과
+    draft_content.json 이 둘 다 들어 있고, 캡컷은 draft_content.json 을 읽는다.
+    한쪽만 고치면 캡컷에서는 아무것도 안 바뀐 것처럼 보이므로 둘 다 같은 내용으로 쓴다.
+    """
+    root = entry.rsplit("/", 1)[0] + "/" if "/" in entry else ""
+    return [root + b for b in ("draft_info.json", "draft_content.json")
+            if root + b in names and root + b != entry]
+
+
 def find_draft_entry(names):
     """zip 안 타임라인 파일 경로 (가장 얕은 것 우선)."""
     for base in ("draft_info.json", "draft_content.json"):
@@ -85,13 +132,14 @@ class Project:
         if not zipfile.is_zipfile(self.path):
             die("zip 파일이 아닙니다: " + os.path.basename(self.path)
                 + "\n     캡컷에서 '프로젝트 내보내기' 한 zip을 넣어주세요.")
-        with zipfile.ZipFile(self.path) as z:
+        with open_zip(self.path) as z:
             self.names = z.namelist()
             self.entry = find_draft_entry(self.names)
             if not self.entry:
                 die("타임라인 파일(draft_info/draft_content.json)을 못 찾았어요.\n"
                     "     캡컷 프로젝트 zip이 맞는지 확인해 주세요.")
             self.draft = json.loads(z.read(self.entry))
+            self.twins = draft_twins(self.names, self.entry)
             self.root = self.entry.rsplit("/", 1)[0] + "/" if "/" in self.entry else ""
             self.meta_entry = None
             self.meta = None
@@ -158,13 +206,13 @@ class Project:
         """원본 zip을 그대로 복사하면서 타임라인/메타만 갈아끼운다."""
         add_files = add_files or {}
         drop = set(drop)
-        with zipfile.ZipFile(self.path) as zin, \
+        with open_zip(self.path) as zin, \
                 zipfile.ZipFile(out_path, "w") as zout:
             for item in zin.infolist():
                 name = item.filename
                 if name in drop or name in add_files:
                     continue
-                if name == self.entry:
+                if name == self.entry or name in self.twins:
                     zout.writestr(name, json.dumps(self.draft, ensure_ascii=False,
                                                    separators=(",", ":")),
                                   zipfile.ZIP_DEFLATED)
@@ -176,7 +224,7 @@ class Project:
                     zi = zipfile.ZipInfo(name, date_time=item.date_time)
                     zi.compress_type = item.compress_type
                     zi.external_attr = item.external_attr
-                    zout.writestr(zi, zin.read(name))
+                    zout.writestr(zi, zin.read(item))
             for name, data in add_files.items():
                 zout.writestr(name, data, zipfile.ZIP_DEFLATED)
         return out_path

@@ -74,6 +74,53 @@ def image_size(path):
 
 # ── 캡컷 프로젝트(zip / draft) 읽기 ────────────────────────────
 
+def fix_zip_name(name):
+    """깨진 한글 파일 이름을 되살린다.
+
+    zip 을 손으로 다시 압축하면 한글 이름이 "UTF-8 표시" 없이 들어가는 경우가
+    있다. 그러면 '누리호' 가 'δêäδª¼φÿ╕' 처럼 읽히고, 그대로 다시 쓰면
+    프로젝트 폴더 이름 자체가 깨져 캡컷에서 미디어를 못 찾는다.
+    """
+    try:
+        raw = name.encode("cp437")      # 깨진 이름은 cp437 로 되돌리면 원래 바이트
+    except UnicodeEncodeError:
+        return name                     # 한글이 제대로 들어 있는 정상 이름
+    if raw.isascii():
+        return name
+    for enc in ("utf-8", "cp949"):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            pass
+    return name
+
+
+def open_zip(path):
+    """읽기용 ZipFile. 깨진 한글 이름을 고쳐서 namelist()/read(이름)에 쓴다."""
+    z = zipfile.ZipFile(path)
+    changed = False
+    for info in z.infolist():
+        fixed = fix_zip_name(info.filename)
+        if fixed != info.filename:
+            info.filename = fixed       # 실제 읽기는 orig_filename 으로 확인하므로 안전
+            changed = True
+    if changed:
+        z.NameToInfo = {i.filename: i for i in z.infolist()}
+    return z
+
+
+def draft_twins(names, entry):
+    """entry 와 같은 폴더에 있는 다른 타임라인 파일들.
+
+    캡컷에서 한 번 열었다 저장한 프로젝트는 draft_info.json 과
+    draft_content.json 이 둘 다 들어 있고, 캡컷은 draft_content.json 을 읽는다.
+    한쪽만 고치면 캡컷에서는 아무것도 안 바뀐 것처럼 보이므로 둘 다 같은 내용으로 쓴다.
+    """
+    root = entry.rsplit("/", 1)[0] + "/" if "/" in entry else ""
+    return [root + b for b in ("draft_info.json", "draft_content.json")
+            if root + b in names and root + b != entry]
+
+
 def find_draft_entry(names):
     """zip 안에서 타임라인 파일 경로를 찾는다 (가장 얕은 것 우선)."""
     for base in ("draft_info.json", "draft_content.json"):
@@ -973,7 +1020,7 @@ def apply_notice(draft, st):
 
 def scan_zip_for_effects(zip_path):
     """다른 캡컷 zip에서 전환/필터/화면효과의 이름과 resource_id를 수집한다."""
-    with zipfile.ZipFile(zip_path) as z:
+    with open_zip(zip_path) as z:
         entry = find_draft_entry(z.namelist())
         if not entry:
             raise RuntimeError("타임라인 파일(draft_info/draft_content.json)을 못 찾았어요.")
@@ -1038,7 +1085,7 @@ def process(zip_path, opts, progress=None):
     """
     rng = random.Random(opts.get("seed"))
     stats = {}
-    with zipfile.ZipFile(zip_path) as zin:
+    with open_zip(zip_path) as zin:
         names = zin.namelist()
         entry = find_draft_entry(names)
         if not entry:
@@ -1094,13 +1141,14 @@ def process(zip_path, opts, progress=None):
         normalize_layers(draft)
 
         out = out_path_for(zip_path)
+        twins = draft_twins(names, entry)
         infos = zin.infolist()
         total_items = len(infos) + (1 if logo_arc else 0)
         with zipfile.ZipFile(out, "w") as zout:
             for i, item in enumerate(infos):
                 if progress:
                     progress(i, total_items)
-                if item.filename == entry:
+                if item.filename == entry or item.filename in twins:
                     zout.writestr(item.filename,
                                   json.dumps(draft, ensure_ascii=False,
                                              separators=(",", ":")),
@@ -1116,7 +1164,7 @@ def process(zip_path, opts, progress=None):
                     zi = zipfile.ZipInfo(item.filename, date_time=item.date_time)
                     zi.compress_type = item.compress_type
                     zi.external_attr = item.external_attr
-                    zout.writestr(zi, zin.read(item.filename))
+                    zout.writestr(zi, zin.read(item))
             if logo_arc:
                 zout.writestr(logo_arc, logo_bytes, zipfile.ZIP_DEFLATED)
             if progress:
