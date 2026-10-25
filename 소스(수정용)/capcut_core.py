@@ -274,8 +274,12 @@ def build_motion(dur_us, mw, mh, cw, ch, rng, snap_local_us=None, fill=FILL_PHOT
     return X, Y, S, (xe, ye, se), snap_ts
 
 
-def apply_motion(draft, rng, snap_mode="rare"):
-    """모든 씬에 드리프트 키프레임을 넣고, 설정 빈도로 휙 컷을 섞는다."""
+def apply_motion(draft, rng, snap_mode="rare", still_video=False):
+    """모든 씬에 드리프트 키프레임을 넣고, 설정 빈도로 휙 컷을 섞는다.
+
+    still_video: 영상(mp4) 씬은 줌·이동 없이 화면에 딱 맞게 그대로 둔다.
+    Remotion 그래프처럼 글자가 화면 끝까지 차 있는 씬이 잘리지 않게.
+    """
     vt = main_video_track(draft)
     segs = vt["segments"]
     mats = {v["id"]: v for v in draft.get("materials", {}).get("videos", [])}
@@ -283,12 +287,15 @@ def apply_motion(draft, rng, snap_mode="rare"):
     ch = draft.get("canvas_config", {}).get("height") or 1080
     total = timeline_end(draft)
 
+    def is_still(s):
+        return still_video and mats.get(s.get("material_id"), {}).get("type") == "video"
+
     # 휙 컷을 넣을 씬 고르기
     snap_by_seg = {}
     if snap_mode == "every":
         for i, s in enumerate(segs):
             d = s["target_timerange"]["duration"]
-            if d >= 4 * US:
+            if d >= 4 * US and not is_still(s):
                 snap_by_seg[i] = rng.uniform(1.1 * US, d - 2.1 * US)
     elif snap_mode in SNAP_RANGES:
         lo, hi = SNAP_RANGES[snap_mode]
@@ -297,7 +304,8 @@ def apply_motion(draft, rng, snap_mode="rare"):
             for i, s in enumerate(segs):
                 st = s["target_timerange"]["start"]
                 d = s["target_timerange"]["duration"]
-                if st <= t < st + d and d >= 4 * US and i not in snap_by_seg:
+                if (st <= t < st + d and d >= 4 * US and i not in snap_by_seg
+                        and not is_still(s)):
                     snap_by_seg[i] = clamp(t - st, 1.1 * US, d - 2.1 * US)
                     break
             t += rng.uniform(lo, hi) * US
@@ -309,6 +317,18 @@ def apply_motion(draft, rng, snap_mode="rare"):
         mh = mat.get("height") or ch
         fill = FILL_PHOTO if mat.get("type") == "photo" else FILL_VIDEO
         dur = s["target_timerange"]["duration"]
+        if is_still(s):
+            # 확대·이동 없이 화면 비율에 딱 맞춤 (16:9 영상이면 배율 1.0 = 원본 그대로)
+            sc = round(cover_scale(mw, mh, cw, ch), 6)
+            s["common_keyframes"] = []
+            clip = s.setdefault("clip", {})
+            clip["transform"] = {"x": 0.0, "y": 0.0}
+            clip["scale"] = {"x": sc, "y": sc}
+            clip["rotation"] = 0.0
+            clip.setdefault("flip", {"vertical": False, "horizontal": False})
+            clip.setdefault("alpha", 1.0)
+            s["uniform_scale"] = {"on": True, "value": 1.0}
+            continue
         X, Y, S, last, snap_local = build_motion(dur, mw, mh, cw, ch, rng,
                                                  snap_by_seg.get(i), fill)
         s["common_keyframes"] = [
@@ -1095,7 +1115,7 @@ def process(zip_path, opts, progress=None):
         root = entry.rsplit("/", 1)[0] + "/" if "/" in entry else ""
 
         stats["scenes"], stats["snap_times"] = apply_motion(
-            draft, rng, opts.get("snap_mode", "rare"))
+            draft, rng, opts.get("snap_mode", "rare"), opts.get("still_video", False))
         stats["transitions"] = apply_transitions(draft, opts.get("transitions") or [], rng)
         effects_sel = opts.get("video_effects") or []
         if opts.get("effect_mode", "all") == "random_one" and len(effects_sel) > 1:

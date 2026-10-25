@@ -72,6 +72,7 @@ NOTICE_PRESETS = {
 
 DEFAULT_SETTINGS = {
     "snap_mode": "rare",
+    "still_video": True,
     "free_only": False,
     "effect_mode": "random_one",
     "logo": {"use": False, "path": "", "preset": "오른쪽 위",
@@ -271,6 +272,15 @@ class App(tk.Tk):
         for val, label in SNAP_MODES:
             ttk.Radiobutton(f, text=label, value=val, variable=self.snap_var) \
                 .pack(anchor="w", padx=28, pady=2)
+
+        ttk.Label(f, text="영상(mp4) 씬", font=("맑은 고딕", 10, "bold")) \
+            .pack(anchor="w", padx=16, pady=(20, 4))
+        self.still_var = tk.BooleanVar(value=self.settings.get("still_video", True))
+        ttk.Checkbutton(f, text="영상(mp4) 씬은 줌·이동 없이 원본 그대로 (추천)",
+                        variable=self.still_var).pack(anchor="w", padx=28, pady=2)
+        ttk.Label(f, text="Remotion 그래프처럼 글자가 화면 끝까지 있는 영상 씬이 잘리지 않게 합니다.\n"
+                          "사진 씬은 지금처럼 드리프트·휙 컷이 들어갑니다.",
+                  style="Sub.TLabel").pack(anchor="w", padx=28)
 
     def select_zip(self):
         p = filedialog.askopenfilename(title="캡컷 프로젝트 zip 선택",
@@ -1147,6 +1157,7 @@ class App(tk.Tk):
 
         opts = {
             "snap_mode": self.snap_var.get(),
+            "still_video": self.still_var.get(),
             "effect_mode": self.fx_mode.get(),
             "transitions": pick("transitions"),
             "filters": pick("filters"),
@@ -1231,6 +1242,7 @@ class App(tk.Tk):
 
     def persist(self):
         self.settings["snap_mode"] = self.snap_var.get()
+        self.settings["still_video"] = self.still_var.get()
         self.settings["free_only"] = self.free_only.get()
         self.settings["effect_mode"] = self.fx_mode.get()
         lg = self.settings["logo"]
