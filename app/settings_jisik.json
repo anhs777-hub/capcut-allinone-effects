@@ -1,10 +1,10 @@
 {
-  "snap_mode": "rare",
+  "snap_mode": "none",
   "free_only": true,
   "effect_mode": "random_one",
   "logo": {
     "use": true,
-    "path": "C:/Users/user/Desktop/지식대학/지식대학 프로필 이미지.png",
+    "path": "C:/Users/user/OneDrive/Desktop/지식대학/지식대학 프로필 이미지.png",
     "preset": "직접 지정",
     "x": 0.901,
     "y": 0.824,
