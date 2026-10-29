@@ -210,13 +210,14 @@ def build_motion(dur_us, mw, mh, cw, ch, rng, snap_local_us=None, fill=FILL_PHOT
     hi_t = end_t - 1.5 * US
     if snap_local_us is None or hi_t <= lo_t:
         # 휙 컷 없이 씬 전체를 한 번에 드리프트
+        # 확대 폭은 최대 약 1.15배 (사진 가장자리 글자가 잘리지 않게)
         pattern = rng.choice(("in", "in", "in", "in", "out", "out", "pan", "pan"))
         if pattern == "in":
-            s0, s1 = round(base, 4), round(base * rng.uniform(1.13, 1.39), 4)
+            s0, s1 = round(base, 4), round(base * rng.uniform(1.04, 1.10), 4)
         elif pattern == "out":
-            s0, s1 = round(base * rng.uniform(1.13, 1.39), 4), round(base, 4)
+            s0, s1 = round(base * rng.uniform(1.04, 1.10), 4), round(base, 4)
         else:
-            s0 = s1 = round(base * rng.uniform(1.15, 1.33), 4)
+            s0 = s1 = round(base * rng.uniform(1.05, 1.09), 4)
         x0, y0 = rpos(s0)
         x1, y1 = rpos(s1)
         X = [(0, x0), (end_t, x1)]

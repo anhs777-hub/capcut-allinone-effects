@@ -9,7 +9,6 @@
 
 import json
 import os
-import subprocess
 import sys
 import threading
 import tkinter as tk
@@ -1343,10 +1342,6 @@ class App(tk.Tk):
         msg.append("\n새 파일: " + out)
         self.status.config(text=" · ".join(msg[:2]))
         messagebox.showinfo("완료!", "\n".join(msg))
-        try:
-            subprocess.Popen(["explorer", "/select,", os.path.normpath(out)])
-        except Exception:
-            pass
 
     def fail(self, e):
         self.run_btn.config(state="normal")
